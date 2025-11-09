@@ -1,4 +1,4 @@
-package ru.yandex.sprint7.utils;
+package ru.yandex.sprint7;
 
 import java.util.UUID;
 import java.util.Random;

@@ -1,14 +1,17 @@
 package ru.yandex.sprint7.order;
 
+import io.qameta.allure.Description;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import ru.yandex.sprint7.BaseTest;
-import ru.yandex.sprint7.utils.TestDataGenerator;
+import ru.yandex.sprint7.TestDataGenerator;
 
 import java.util.Arrays;
 
+import static org.apache.http.HttpStatus.*;
 import static org.hamcrest.Matchers.*;
 
 public class OrderListTest extends BaseTest {
@@ -16,26 +19,37 @@ public class OrderListTest extends BaseTest {
     private static String password;
     private static String firstName;
     private static int orderTrack = -1;
+    private static int courierId = -1;
+
+    @BeforeClass
+    public static void setUpCourier() {
+        OrderListTest test = new OrderListTest();
+        test.setUp();
+        
+        login = TestDataGenerator.generateRandomLogin();
+        password = TestDataGenerator.generateRandomPassword();
+        firstName = TestDataGenerator.generateRandomFirstName();
+
+        test.courierApi.createCourier(login, password, firstName);
+        courierId = test.courierApi.getCourierId(login, password);
+    }
 
     @AfterClass
     public static void tearDown() {
         OrderListTest test = new OrderListTest();
         test.setUp();
         
-        // Отменяем заказ
         if (orderTrack != -1) {
             try {
-                test.cancelOrder(orderTrack);
+                test.orderApi.cancelOrder(orderTrack);
             } catch (Exception e) {
                 // Заказ уже отменен или не существует
             }
         }
 
-        // Удаляем курьера
-        if (login != null && password != null) {
+        if (login != null && password != null && courierId != -1) {
             try {
-                int courierId = test.getCourierId(login, password);
-                test.deleteCourier(courierId);
+                test.courierApi.deleteCourier(courierId);
             } catch (Exception e) {
                 // Курьер уже удален или не существует
             }
@@ -43,46 +57,33 @@ public class OrderListTest extends BaseTest {
     }
 
     @Test
-    @Step("Тест получения списка заказов")
+    @Description("Тест получения списка заказов")
     public void testGetOrdersList() {
-        Response response = getOrders(null, null, null, null);
+        Response response = orderApi.getOrders(null, null, null, null);
 
         checkGetOrdersSuccess(response);
     }
 
     @Test
-    @Step("Тест получения списка заказов с courierId")
+    @Description("Тест получения списка заказов с courierId")
     public void testGetOrdersWithCourierId() {
-        // Используем курьера из других тестов или создаем нового
-        if (login == null) {
-            login = TestDataGenerator.generateRandomLogin();
-            password = TestDataGenerator.generateRandomPassword();
-            firstName = TestDataGenerator.generateRandomFirstName();
-            System.out.println("Создаем курьера для получения списка заказов: login=" + login);
-            createCourier(login, password, firstName);
-        } else {
-            System.out.println("Используем существующего курьера: login=" + login);
-        }
-        int courierId = getCourierId(login, password);
-
-        Response response = getOrders(courierId, null, null, null);
+        Response response = orderApi.getOrders(courierId, null, null, null);
 
         checkGetOrdersSuccess(response);
     }
 
     @Test
-    @Step("Тест получения списка заказов с фильтром станций")
+    @Description("Тест получения списка заказов с фильтром станций")
     public void testGetOrdersWithStationFilter() {
-        Response response = getOrders(null, Arrays.asList("1", "2"), null, null);
+        Response response = orderApi.getOrders(null, Arrays.asList("1", "2"), null, null);
 
-        // API может возвращать 500 при неверных станциях, проверяем любой ответ
-        response.then().statusCode(anyOf(is(200), is(500)));
+        response.then().statusCode(anyOf(is(SC_OK), is(SC_INTERNAL_SERVER_ERROR)));
     }
 
     @Test
-    @Step("Тест получения списка заказов с пагинацией")
+    @Description("Тест получения списка заказов с пагинацией")
     public void testGetOrdersWithPagination() {
-        Response response = getOrders(null, null, 5, 1);
+        Response response = orderApi.getOrders(null, null, 5, 1);
 
         checkGetOrdersSuccess(response);
     }
@@ -90,7 +91,7 @@ public class OrderListTest extends BaseTest {
     @Step("Проверить успешное получение списка заказов")
     private void checkGetOrdersSuccess(Response response) {
         response.then()
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body("orders", notNullValue())
                 .body("pageInfo", notNullValue());
     }

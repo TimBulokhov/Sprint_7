@@ -1,15 +1,18 @@
 package ru.yandex.sprint7.order;
 
+import io.qameta.allure.Description;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.junit.AfterClass;
 import org.junit.Test;
 import ru.yandex.sprint7.BaseTest;
-import ru.yandex.sprint7.utils.TestDataGenerator;
+import ru.yandex.sprint7.constants.Constants;
+import ru.yandex.sprint7.TestDataGenerator;
 
 import java.util.Arrays;
 
 import static io.restassured.RestAssured.given;
+import static org.apache.http.HttpStatus.*;
 import static org.hamcrest.Matchers.*;
 
 public class OrderTrackTest extends BaseTest {
@@ -21,7 +24,7 @@ public class OrderTrackTest extends BaseTest {
             try {
                 OrderTrackTest test = new OrderTrackTest();
                 test.setUp();
-                test.cancelOrder(orderTrack);
+                test.orderApi.cancelOrder(orderTrack);
             } catch (Exception e) {
                 // Заказ уже отменен или не существует
             }
@@ -29,9 +32,8 @@ public class OrderTrackTest extends BaseTest {
     }
 
     @Test
-    @Step("Тест успешного получения заказа по трек-номеру")
+    @Description("Тест успешного получения заказа по трек-номеру")
     public void testGetOrderByTrackSuccess() {
-        // Создаем заказ со случайными данными
         String firstName = TestDataGenerator.generateRandomFirstName();
         String lastName = TestDataGenerator.generateRandomLastNameForFirstName(firstName);
         String address = TestDataGenerator.generateRandomAddress();
@@ -41,8 +43,7 @@ public class OrderTrackTest extends BaseTest {
         String deliveryDate = TestDataGenerator.generateRandomDeliveryDate();
         String comment = TestDataGenerator.generateRandomComment();
 
-        System.out.println("Создаем заказ для получения по трек-номеру: firstName=" + firstName + ", lastName=" + lastName);
-        Response createOrderResponse = createOrder(
+        Response createOrderResponse = orderApi.createOrder(
                 firstName,
                 lastName,
                 address,
@@ -53,28 +54,28 @@ public class OrderTrackTest extends BaseTest {
                 comment,
                 Arrays.asList("BLACK")
         );
-        orderTrack = getOrderTrack(createOrderResponse);
+        orderTrack = orderApi.getOrderTrack(createOrderResponse);
 
-        Response response = getOrderByTrack(orderTrack);
+        Response response = orderApi.getOrderByTrack(orderTrack);
 
         checkGetOrderSuccess(response);
     }
 
     @Test
-    @Step("Тест получения заказа без трек-номера")
+    @Description("Тест получения заказа без трек-номера")
     public void testGetOrderWithoutTrack() {
         Response response = given()
                 .spec(requestSpec)
                 .when()
-                .get(ORDERS_TRACK_PATH);
+                .get(Constants.ORDERS_TRACK_PATH);
 
         checkGetOrderError(response);
     }
 
     @Test
-    @Step("Тест получения заказа с неверным трек-номером")
+    @Description("Тест получения заказа с неверным трек-номером")
     public void testGetOrderWithInvalidTrack() {
-        Response response = getOrderByTrack(999999);
+        Response response = orderApi.getOrderByTrack(999999);
 
         checkGetOrderError(response);
     }
@@ -82,7 +83,7 @@ public class OrderTrackTest extends BaseTest {
     @Step("Проверить успешное получение заказа")
     private void checkGetOrderSuccess(Response response) {
         response.then()
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body("order", notNullValue())
                 .body("order.id", notNullValue())
                 .body("order.firstName", notNullValue())
@@ -91,8 +92,7 @@ public class OrderTrackTest extends BaseTest {
 
     @Step("Проверить ошибку при получении заказа")
     private void checkGetOrderError(Response response) {
-        // API возвращает 400 для отсутствующих параметров, 404 для несуществующих ресурсов
         response.then()
-                .statusCode(anyOf(is(400), is(404)));
+                .statusCode(anyOf(is(SC_BAD_REQUEST), is(SC_NOT_FOUND)));
     }
 }

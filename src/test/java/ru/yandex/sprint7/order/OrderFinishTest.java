@@ -1,15 +1,19 @@
 package ru.yandex.sprint7.order;
 
+import io.qameta.allure.Description;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import ru.yandex.sprint7.BaseTest;
-import ru.yandex.sprint7.utils.TestDataGenerator;
+import ru.yandex.sprint7.constants.Constants;
+import ru.yandex.sprint7.TestDataGenerator;
 
 import java.util.Arrays;
 
 import static io.restassured.RestAssured.given;
+import static org.apache.http.HttpStatus.*;
 import static org.hamcrest.Matchers.*;
 
 public class OrderFinishTest extends BaseTest {
@@ -20,27 +24,35 @@ public class OrderFinishTest extends BaseTest {
     private static int orderId = -1;
     private static int courierId = -1;
 
+    @BeforeClass
+    public static void setUpCourier() {
+        OrderFinishTest test = new OrderFinishTest();
+        test.setUp();
+        
+        login = TestDataGenerator.generateRandomLogin();
+        password = TestDataGenerator.generateRandomPassword();
+        firstName = TestDataGenerator.generateRandomFirstName();
+
+        test.courierApi.createCourier(login, password, firstName);
+        courierId = test.courierApi.getCourierId(login, password);
+    }
+
     @AfterClass
     public static void tearDown() {
         OrderFinishTest test = new OrderFinishTest();
         test.setUp();
         
-        // Отменяем заказ если не завершен
         if (orderTrack != -1) {
             try {
-                test.cancelOrder(orderTrack);
+                test.orderApi.cancelOrder(orderTrack);
             } catch (Exception e) {
                 // Заказ уже отменен или не существует
             }
         }
 
-        // Удаляем курьера
-        if (login != null && password != null) {
+        if (login != null && password != null && courierId != -1) {
             try {
-                if (courierId == -1) {
-                    courierId = test.getCourierId(login, password);
-                }
-                test.deleteCourier(courierId);
+                test.courierApi.deleteCourier(courierId);
             } catch (Exception e) {
                 // Курьер уже удален или не существует
             }
@@ -48,23 +60,8 @@ public class OrderFinishTest extends BaseTest {
     }
 
     @Test
-    @Step("Тест успешного завершения заказа")
+    @Description("Тест успешного завершения заказа")
     public void testFinishOrderSuccess() {
-        // Создаем курьера
-        if (login == null) {
-            login = TestDataGenerator.generateRandomLogin();
-            password = TestDataGenerator.generateRandomPassword();
-            firstName = TestDataGenerator.generateRandomFirstName();
-            System.out.println("Создаем курьера для завершения заказа: login=" + login);
-            createCourier(login, password, firstName);
-        } else {
-            System.out.println("Используем существующего курьера: login=" + login);
-        }
-        if (courierId == -1) {
-            courierId = getCourierId(login, password);
-        }
-
-        // Создаем заказ со случайными данными
         String orderFirstName = TestDataGenerator.generateRandomFirstName();
         String orderLastName = TestDataGenerator.generateRandomLastNameForFirstName(orderFirstName);
         String address = TestDataGenerator.generateRandomAddress();
@@ -74,8 +71,7 @@ public class OrderFinishTest extends BaseTest {
         String deliveryDate = TestDataGenerator.generateRandomDeliveryDate();
         String comment = TestDataGenerator.generateRandomComment();
 
-        System.out.println("Создаем заказ для завершения: firstName=" + orderFirstName + ", metroStation=" + metroStation);
-        Response createOrderResponse = createOrder(
+        Response createOrderResponse = orderApi.createOrder(
                 orderFirstName,
                 orderLastName,
                 address,
@@ -86,43 +82,38 @@ public class OrderFinishTest extends BaseTest {
                 comment,
                 Arrays.asList("BLACK")
         );
-        orderTrack = getOrderTrack(createOrderResponse);
+        orderTrack = orderApi.getOrderTrack(createOrderResponse);
 
-        // Получаем ID заказа
-        Response trackResponse = getOrderByTrack(orderTrack);
+        Response trackResponse = orderApi.getOrderByTrack(orderTrack);
         orderId = trackResponse.then().extract().path("order.id");
 
-        // Принимаем заказ
-        acceptOrder(orderId, courierId);
+        orderApi.acceptOrder(orderId, courierId);
 
-        // Завершаем заказ
-        Response response = finishOrder(orderId);
+        Response response = orderApi.finishOrder(orderId);
 
         checkFinishSuccess(response);
-        // После успешного завершения помечаем как завершенный
-        if (response.getStatusCode() == 200) {
+        if (response.getStatusCode() == SC_OK) {
             orderTrack = -1;
         }
     }
 
     @Test
-    @Step("Тест завершения заказа без id")
+    @Description("Тест завершения заказа без id")
     public void testFinishOrderWithoutId() {
         Response response = given()
                 .spec(requestSpec)
                 .body("{}")
                 .when()
-                .put(ORDERS_FINISH_PATH);
+                .put(Constants.ORDERS_FINISH_PATH);
 
         checkFinishError(response);
     }
 
     @Test
-    @Step("Тест завершения заказа с неверным id")
+    @Description("Тест завершения заказа с неверным id")
     public void testFinishOrderWithInvalidId() {
-        // Используем orderId из testFinishOrderSuccess, если он есть
         int testOrderId = (orderId != -1) ? orderId : 999999;
-        Response response = finishOrder(testOrderId);
+        Response response = orderApi.finishOrder(testOrderId);
 
         checkFinishError(response);
     }
@@ -130,14 +121,13 @@ public class OrderFinishTest extends BaseTest {
     @Step("Проверить успешное завершение заказа")
     private void checkFinishSuccess(Response response) {
         response.then()
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body("ok", equalTo(true));
     }
 
     @Step("Проверить ошибку при завершении заказа")
     private void checkFinishError(Response response) {
-        // API возвращает 400 для отсутствующих параметров, 404 для несуществующих ресурсов, 409 для конфликтов
         response.then()
-                .statusCode(anyOf(is(400), is(404), is(409)));
+                .statusCode(anyOf(is(SC_BAD_REQUEST), is(SC_NOT_FOUND), is(SC_CONFLICT)));
     }
 }

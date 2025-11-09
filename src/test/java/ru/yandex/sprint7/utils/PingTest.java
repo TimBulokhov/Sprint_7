@@ -6,6 +6,7 @@ import org.junit.Test;
 import ru.yandex.sprint7.BaseTest;
 
 import static io.restassured.RestAssured.given;
+import static org.apache.http.HttpStatus.*;
 import static org.hamcrest.Matchers.*;
 
 public class PingTest extends BaseTest {
@@ -23,7 +24,7 @@ public class PingTest extends BaseTest {
     @Step("Проверить успешный пинг сервера")
     private void checkPingSuccess(Response response) {
         response.then()
-                .statusCode(200)
+                .statusCode(SC_OK)
                 .body(equalTo("pong;"));
     }
 }

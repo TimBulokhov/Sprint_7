@@ -1,146 +1,124 @@
 package ru.yandex.sprint7.courier;
 
+import io.qameta.allure.Description;
 import io.qameta.allure.Step;
 import io.restassured.response.Response;
 import org.junit.AfterClass;
 import org.junit.Test;
 import ru.yandex.sprint7.BaseTest;
-import ru.yandex.sprint7.utils.TestDataGenerator;
+import ru.yandex.sprint7.TestDataGenerator;
 
+import static org.apache.http.HttpStatus.*;
 import static org.hamcrest.Matchers.*;
 
 public class CourierCreateTest extends BaseTest {
-    private static String login;
-    private static String password;
-    private static String firstName;
+    private static java.util.List<String> logins = new java.util.ArrayList<>();
+    private static java.util.List<String> passwords = new java.util.ArrayList<>();
 
     @AfterClass
     public static void tearDown() {
-        if (login != null && password != null) {
+        CourierCreateTest test = new CourierCreateTest();
+        test.setUp();
+        for (int i = 0; i < logins.size(); i++) {
             try {
-                CourierCreateTest test = new CourierCreateTest();
-                test.setUp();
-                int courierId = test.getCourierId(login, password);
-                test.deleteCourier(courierId);
+                String login = logins.get(i);
+                String password = passwords.get(i);
+                int courierId = test.courierApi.getCourierId(login, password);
+                test.courierApi.deleteCourier(courierId);
             } catch (Exception e) {
                 // Курьер уже удален или не существует
             }
         }
+        logins.clear();
+        passwords.clear();
     }
 
     @Test
-    @Step("Тест успешного создания курьера")
+    @Description("Тест успешного создания курьера")
     public void testCreateCourierSuccess() {
-        login = TestDataGenerator.generateRandomLogin();
-        password = TestDataGenerator.generateRandomPassword();
-        firstName = TestDataGenerator.generateRandomFirstName();
+        String login = TestDataGenerator.generateRandomLogin();
+        String password = TestDataGenerator.generateRandomPassword();
+        String firstName = TestDataGenerator.generateRandomFirstName();
 
-        System.out.println("Создаем курьера с данными: login=" + login + ", firstName=" + firstName);
-
-        Response response = createCourier(login, password, firstName);
+        Response response = courierApi.createCourier(login, password, firstName);
 
         checkCreateCourierSuccess(response);
+        
+        logins.add(login);
+        passwords.add(password);
     }
 
     @Test
-    @Step("Тест создания дубликата курьера")
+    @Description("Тест создания дубликата курьера")
     public void testCreateDuplicateCourier() {
-        // Используем курьера из testCreateCourierSuccess или создаем нового
-        if (login == null) {
-            login = TestDataGenerator.generateRandomLogin();
-            password = TestDataGenerator.generateRandomPassword();
-            firstName = TestDataGenerator.generateRandomFirstName();
-            System.out.println("Создаем курьера для проверки дубликата: login=" + login);
-            // Создаем курьера первый раз
-            createCourier(login, password, firstName);
-        } else {
-            System.out.println("Используем существующего курьера: login=" + login);
-            // Если курьер уже создан в другом тесте, убеждаемся что он существует
-            // Если был удален, создаем заново
-            try {
-                getCourierId(login, password);
-            } catch (Exception e) {
-                // Курьер не существует, создаем заново
-                createCourier(login, password, firstName);
-            }
-        }
+        String testLogin = TestDataGenerator.generateRandomLogin();
+        String testPassword = TestDataGenerator.generateRandomPassword();
+        String testFirstName = TestDataGenerator.generateRandomFirstName();
+        
+        // Создаем курьера первый раз
+        courierApi.createCourier(testLogin, testPassword, testFirstName);
 
         // Попытка создать дубликат с теми же данными
-        System.out.println("Попытка создать дубликат курьера с login=" + login);
-        Response response = createCourier(login, password, firstName);
+        Response response = courierApi.createCourier(testLogin, testPassword, testFirstName);
 
         checkCreateDuplicateCourierError(response);
+        
+        logins.add(testLogin);
+        passwords.add(testPassword);
     }
 
     @Test
-    @Step("Тест создания курьера без логина")
+    @Description("Тест создания курьера без логина")
     public void testCreateCourierWithoutLogin() {
-        // Используем пароль из основного теста или генерируем новый
-        if (password == null) {
-            password = TestDataGenerator.generateRandomPassword();
-        }
-        if (firstName == null) {
-            firstName = TestDataGenerator.generateRandomFirstName();
-        }
+        String testPassword = TestDataGenerator.generateRandomPassword();
+        String testFirstName = TestDataGenerator.generateRandomFirstName();
 
-        System.out.println("Тест создания курьера без логина, используем password и firstName из других тестов");
-        Response response = createCourier("", password, firstName);
+        Response response = courierApi.createCourier("", testPassword, testFirstName);
 
         checkCreateCourierMissingFieldError(response);
     }
 
     @Test
-    @Step("Тест создания курьера без пароля")
+    @Description("Тест создания курьера без пароля")
     public void testCreateCourierWithoutPassword() {
-        // Используем логин из основного теста или создаем новый
-        if (login == null) {
-            login = TestDataGenerator.generateRandomLogin();
-        }
-        if (firstName == null) {
-            firstName = TestDataGenerator.generateRandomFirstName();
-        }
+        String testLogin = TestDataGenerator.generateRandomLogin();
+        String testFirstName = TestDataGenerator.generateRandomFirstName();
 
-        System.out.println("Тест создания курьера без пароля, используем login=" + login + " из других тестов");
-        Response response = createCourier(login, "", firstName);
+        Response response = courierApi.createCourier(testLogin, "", testFirstName);
 
         checkCreateCourierMissingFieldError(response);
     }
 
     @Test
-    @Step("Тест создания курьера без имени")
+    @Description("Тест создания курьера без имени")
     public void testCreateCourierWithoutFirstName() {
-        // Создаем нового курьера с уникальным логином для этого теста
         String testLogin = TestDataGenerator.generateRandomLogin();
         String testPassword = TestDataGenerator.generateRandomPassword();
 
-        System.out.println("Тест создания курьера без имени: login=" + testLogin);
-        Response response = createCourier(testLogin, testPassword, "");
+        Response response = courierApi.createCourier(testLogin, testPassword, "");
 
         checkCreateCourierSuccess(response); // firstName может быть необязательным
         
-        // Сохраняем данные для очистки
-        if (login == null) {
-            login = testLogin;
-            password = testPassword;
-        }
+        logins.add(testLogin);
+        passwords.add(testPassword);
     }
 
     @Step("Проверить успешное создание курьера")
     private void checkCreateCourierSuccess(Response response) {
         response.then()
-                .statusCode(201)
+                .statusCode(SC_CREATED)
                 .body("ok", equalTo(true));
     }
 
     @Step("Проверить ошибку при создании дубликата курьера")
     private void checkCreateDuplicateCourierError(Response response) {
         response.then()
-                .statusCode(409); // API возвращает 409 вместо 400
+                .statusCode(SC_CONFLICT);
     }
 
     @Step("Проверить ошибку при отсутствии обязательных полей")
     private void checkCreateCourierMissingFieldError(Response response) {
         response.then()
-                .statusCode(400);
+                .statusCode(SC_BAD_REQUEST);
     }
 }
